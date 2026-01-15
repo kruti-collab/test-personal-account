@@ -1,0 +1,15 @@
+{
+  "name": "pre-commit",
+  "description": "Run checks before committing",
+  "trigger": "pre-commit",
+  "actions": [
+    {
+      "type": "bash",
+      "command": "npm test"
+    },
+    {
+      "type": "bash",
+      "command": "npm run lint"
+    }
+  ]
+}

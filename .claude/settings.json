@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm test)",
+      "Bash(npm run build)",
+      "Read",
+      "Write"
+    ],
+    "deny": [
+      "Bash(rm -rf)"
+    ]
+  },
+  "preferences": {
+    "autoCompact": true,
+    "theme": "dark"
+  }
+}
