@@ -1,0 +1,110 @@
+# GAL API Expert - Mental Model
+# This file represents the accumulated knowledge about the GAL API
+# Updated automatically by self-improve.md after changes
+
+version: "1.0"
+last_updated: "2026-01-07"
+domain: "GAL Express.js API"
+
+# Core Architecture
+architecture:
+  framework: "Express.js"
+  language: "TypeScript"
+  entry_point: "apps/api/src/index.ts"
+  deployment: "Google Cloud Run"
+  database: "Firestore"
+
+# Authentication Flows
+auth:
+  methods:
+    - name: "GitHub OAuth"
+      endpoint: "/auth/github"
+      callback: "/auth/github/callback"
+      token_storage: "httpOnly cookie"
+    - name: "Dev Token"
+      endpoint: "/auth/dev-token"
+      purpose: "Local development testing"
+      requires: "TEST_USER_GITHUB_ID, TEST_USER_USERNAME"
+    - name: "CI OIDC"
+      endpoint: "/auth/ci"
+      purpose: "GitHub Actions authentication"
+      verification: "JWKS cryptographic"
+
+  middleware:
+    requireAuth:
+      location: "apps/api/src/index.ts"
+      purpose: "Verify JWT from cookie"
+    requireOrgAccess:
+      location: "apps/api/src/index.ts"
+      purpose: "Verify user is org member"
+    requirePlan:
+      location: "apps/api/src/index.ts"
+      purpose: "Check subscription tier"
+
+# Key Endpoints
+endpoints:
+  auth:
+    - { method: "GET", path: "/auth/status", auth: false, purpose: "Check auth config" }
+    - { method: "GET", path: "/auth/github", auth: false, purpose: "Start OAuth flow" }
+    - { method: "GET", path: "/auth/github/callback", auth: false, purpose: "OAuth callback" }
+    - { method: "GET", path: "/auth/me", auth: true, purpose: "Get current user" }
+    - { method: "POST", path: "/auth/logout", auth: false, purpose: "Clear auth cookie" }
+
+  organizations:
+    - { method: "GET", path: "/organizations", auth: true, purpose: "List user's orgs" }
+    - { method: "GET", path: "/organizations/:orgName", auth: true, purpose: "Get org details" }
+    - { method: "DELETE", path: "/organizations/:orgName", auth: true, purpose: "Disconnect org" }
+    - { method: "POST", path: "/scan/:orgName", auth: true, purpose: "Trigger config scan" }
+
+  configs:
+    - { method: "GET", path: "/organizations/:orgName/configs", auth: true, purpose: "List configs" }
+    - { method: "GET", path: "/organizations/:orgName/approved-config", auth: true, purpose: "Get approved config" }
+    - { method: "PUT", path: "/organizations/:orgName/approved-config", auth: true, purpose: "Set approved config" }
+
+  billing:
+    - { method: "POST", path: "/webhook", auth: false, purpose: "Stripe webhook" }
+    - { method: "GET", path: "/organizations/:orgName/billing", auth: true, purpose: "Get billing status" }
+    - { method: "POST", path: "/organizations/:orgName/checkout", auth: true, purpose: "Create checkout session" }
+
+# Services
+services:
+  - name: "auth-service"
+    path: "apps/api/src/services/auth-service.ts"
+    purpose: "JWT generation and verification"
+  - name: "stripe-service"
+    path: "apps/api/src/services/stripe-service.ts"
+    purpose: "Billing and subscriptions"
+  - name: "firestore-service"
+    path: "apps/api/src/services/firestore-service.ts"
+    purpose: "Database operations"
+  - name: "claude-scanner"
+    path: "apps/api/src/services/claude-scanner.ts"
+    purpose: "Scan repos for Claude configs"
+  - name: "invite-service"
+    path: "apps/api/src/services/invite-service.ts"
+    purpose: "Team invitations and seat management"
+
+# Security Patterns
+security:
+  rate_limiting:
+    auth_endpoints: "10 requests/minute"
+    scan_endpoints: "5 requests/minute"
+  secrets:
+    storage: "GCP Secret Manager"
+    local_fallback: "scripts/load-env.sh"
+  jwt:
+    secret_source: "JWT_SECRET env var"
+    cookie_name: "gal_token"
+    expiry: "7 days"
+
+# Known Patterns
+patterns:
+  - name: "Backward Compatible API Changes"
+    rule: "Never remove endpoints or change field types"
+    reason: "PR previews use shared staging API"
+  - name: "Layered Deployment"
+    rule: "API changes deploy before Dashboard changes"
+    flow: "PR1: API (backward compatible) → PR2: Dashboard (use new API)"
+  - name: "Error Sanitization"
+    rule: "Never expose stack traces to users"
+    helper: "getUserFriendlyError()"

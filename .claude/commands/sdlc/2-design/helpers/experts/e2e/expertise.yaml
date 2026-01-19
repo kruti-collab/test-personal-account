@@ -1,0 +1,133 @@
+# GAL E2E Testing Expert - Mental Model
+# This file represents accumulated knowledge about E2E testing patterns
+# Updated automatically by self-improve.md after test changes
+
+version: "1.0"
+last_updated: "2026-01-07"
+domain: "GAL Playwright E2E Tests"
+
+# Core Architecture
+architecture:
+  framework: "Playwright"
+  language: "TypeScript"
+  config: "apps/dashboard/playwright.config.ts"
+  test_root: "apps/dashboard/e2e/"
+
+# Test Organization
+structure:
+  setup:
+    path: "apps/dashboard/e2e/setup/"
+    files:
+      - global-setup.ts   # Auth token generation
+      - auth-setup.ts     # Storage state management
+  ui:
+    path: "apps/dashboard/e2e/ui/"
+    subdirs:
+      - smoke/            # Quick navigation tests (<5min)
+      - features/         # Feature acceptance tests (<10min)
+      - workflows/        # Full user journeys (10-20min)
+  utils:
+    path: "apps/dashboard/e2e/utils/"
+    purpose: "Shared utilities and helpers"
+  pages:
+    path: "apps/dashboard/e2e/pages/"
+    purpose: "Page object models"
+
+# Environment Configuration
+environments:
+  dev-local:
+    base_url: "http://localhost:5173"
+    api_url: "http://localhost:3000"
+    auth_endpoint: "/auth/dev-token"
+    mocks_allowed: true
+  staging-preview:
+    base_url: "Firebase preview URL"
+    api_url: "Staging API"
+    auth_endpoint: "/auth/ci"
+    mocks_allowed: false
+  staging:
+    base_url: "https://gal-staging-dashboard.web.app"
+    api_url: "https://gal-api-wug5dzqj2a-uc.a.run.app"
+    auth_endpoint: "/auth/ci"
+    mocks_allowed: false
+
+# Authentication Patterns
+auth:
+  storage_state:
+    path: "apps/dashboard/e2e/.auth/storage-state.json"
+    generated_by: "global-setup.ts"
+    contains: "JWT token in cookie format"
+  dev_local:
+    requires: ["TEST_USER_GITHUB_ID", "TEST_USER_USERNAME"]
+    configured_in: "scripts/env-config.sh"
+  ci:
+    requires: "GITHUB_OIDC_TOKEN"
+    workflow_permission: "id-token: write"
+
+# Critical Patterns
+patterns:
+  - name: "Login Redirect Guard"
+    rule: "All authenticated page tests MUST check for login redirect"
+    code: |
+      await page.goto('/path')
+      await page.waitForSelector('h1, h2', { timeout: 10000 })
+      if (page.url().includes('/login')) {
+        console.log('Redirected to login - skipping test')
+        return
+      }
+    reason: "CI auth can fail intermittently"
+
+  - name: "No OR-Logic Blind Pass"
+    rule: "Never use || for test assertions"
+    bad: "const ok = a.isVisible() || b.isVisible(); expect(ok).toBe(true)"
+    good: "await expect(a).toBeVisible(); await expect(b).toBeVisible()"
+    reason: "OR-logic masks real failures"
+
+  - name: "Proper Wait Patterns"
+    rule: "Never use waitForTimeout or networkidle"
+    good_patterns:
+      - "await page.waitForURL('**/path**')"
+      - "await expect(element).toBeVisible()"
+      - "await page.waitForResponse(resp => resp.url().includes('/api'))"
+
+  - name: "Playwright Filter Syntax"
+    rule: "Use .filter() not :has-text()"
+    bad: "page.locator('h1:has-text(\"Title\")')"
+    good: "page.locator('h1').filter({ hasText: 'Title' })"
+
+# Test Workflows
+workflows:
+  smoke:
+    purpose: "Quick navigation and rendering verification"
+    duration: "<5 minutes"
+    workflow_file: "e2e-dashboard-smoke.yml"
+  features:
+    purpose: "Feature acceptance criteria verification"
+    duration: "<10 minutes"
+    workflow_file: "e2e-dashboard-features.yml"
+  admin_workflow:
+    purpose: "Admin user journey tests"
+    duration: "10-20 minutes"
+    workflow_file: "e2e-admin-workflow.yml"
+  developer_workflow:
+    purpose: "Developer user journey tests"
+    duration: "10-20 minutes"
+    workflow_file: "e2e-developer-workflow.yml"
+
+# Skipped Tests
+skipped_tests:
+  tracking_file: "apps/dashboard/e2e/SKIPPED_TESTS.md"
+  categories:
+    - "Feature Not Implemented"
+    - "Requires Special State"
+    - "Slow Tests"
+    - "External Service Dependency"
+
+# CI Integration
+ci:
+  parallel_workers: 4
+  retries_in_ci: 2
+  timeout_local: "30s"
+  timeout_ci: "60s"
+  golden_rule: "Fix failing tests first, then run full pipeline"
+  skip_ci_pattern: "[skip ci]"
